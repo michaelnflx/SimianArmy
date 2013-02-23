@@ -58,6 +58,9 @@ public abstract class AWSEmailNotifier implements MonkeyEmailNotifier {
 
     @Override
     public void sendEmail(String to, String subject, String body) {
+        //zhefu TODO remove
+        to = "michaelf@netflix.com";
+
         if (!isValidEmail(to)) {
             LOGGER.error(String.format("The destination email address %s is not valid,  no email is sent.", to));
             return;

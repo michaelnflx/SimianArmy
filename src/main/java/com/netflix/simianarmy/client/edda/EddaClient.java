@@ -1,6 +1,5 @@
 package com.netflix.simianarmy.client.edda;
 
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.netflix.simianarmy.MonkeyConfiguration;
 import com.netflix.simianarmy.client.MonkeyRestClient;
@@ -13,7 +12,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.Set;
 
 /**

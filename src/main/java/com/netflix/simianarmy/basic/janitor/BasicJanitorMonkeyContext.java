@@ -28,11 +28,11 @@ import com.netflix.simianarmy.aws.janitor.EBSVolumeJanitor;
 import com.netflix.simianarmy.aws.janitor.InstanceJanitor;
 import com.netflix.simianarmy.aws.janitor.LaunchConfigJanitor;
 import com.netflix.simianarmy.aws.janitor.SimpleDBJanitorResourceTracker;
-import com.netflix.simianarmy.aws.janitor.crawler.ASGJanitorCrawler;
-import com.netflix.simianarmy.aws.janitor.crawler.EBSSnapshotJanitorCrawler;
-import com.netflix.simianarmy.aws.janitor.crawler.EBSVolumeJanitorCrawler;
-import com.netflix.simianarmy.aws.janitor.crawler.InstanceJanitorCrawler;
-import com.netflix.simianarmy.aws.janitor.crawler.LaunchConfigJanitorCrawler;
+import com.netflix.simianarmy.aws.janitor.crawler.edda.EddaASGJanitorCrawler;
+import com.netflix.simianarmy.aws.janitor.crawler.edda.EddaEBSSnapshotJanitorCrawler;
+import com.netflix.simianarmy.aws.janitor.crawler.edda.EddaEBSVolumeJanitorCrawler;
+import com.netflix.simianarmy.aws.janitor.crawler.edda.EddaInstanceJanitorCrawler;
+import com.netflix.simianarmy.aws.janitor.crawler.edda.EddaLaunchConfigJanitorCrawler;
 import com.netflix.simianarmy.aws.janitor.rule.asg.ASGInstanceValidator;
 import com.netflix.simianarmy.aws.janitor.rule.asg.DiscoveryASGInstanceValidator;
 import com.netflix.simianarmy.aws.janitor.rule.asg.DummyASGInstanceValidator;
@@ -41,8 +41,10 @@ import com.netflix.simianarmy.aws.janitor.rule.asg.SuspendedASGRule;
 import com.netflix.simianarmy.aws.janitor.rule.instance.OrphanedInstanceRule;
 import com.netflix.simianarmy.aws.janitor.rule.launchconfig.OldUnusedLaunchConfigRule;
 import com.netflix.simianarmy.aws.janitor.rule.snapshot.NoGeneratedAMIRule;
+import com.netflix.simianarmy.aws.janitor.rule.volume.DeleteOnTerminationRule;
 import com.netflix.simianarmy.aws.janitor.rule.volume.OldDetachedVolumeRule;
 import com.netflix.simianarmy.basic.BasicSimianArmyContext;
+import com.netflix.simianarmy.client.edda.EddaClient;
 import com.netflix.simianarmy.janitor.AbstractJanitor;
 import com.netflix.simianarmy.janitor.JanitorCrawler;
 import com.netflix.simianarmy.janitor.JanitorEmailBuilder;
@@ -169,9 +171,12 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
                                     instanceValidator
                     ));
         }
-        JanitorCrawler asgCrawler = new ASGJanitorCrawler(awsClient());
+        //zhefu TODO based on config
+        JanitorCrawler crawler = new EddaASGJanitorCrawler(
+                new EddaClient(30000, 3, 1000, configuration()), "us-east-1", "eu-west-1");
+//        JanitorCrawler crawler = new ASGJanitorCrawler(awsClient());
         BasicJanitorContext asgJanitorCtx = new BasicJanitorContext(
-                monkeyRegion, ruleEngine, asgCrawler, janitorResourceTracker,
+                monkeyRegion, ruleEngine, crawler, janitorResourceTracker,
                 monkeyCalendar, configuration(), recorder());
         return new ASGJanitor(awsClient(), asgJanitorCtx);
     }
@@ -188,7 +193,10 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
                                             "simianarmy.janitor.rule.orphanedInstanceRule.retentionDaysWithoutOwner",
                                             8)));
         }
-        JanitorCrawler instanceCrawler = new InstanceJanitorCrawler(awsClient());
+        //zhefu TODO based on config
+//        JanitorCrawler instanceCrawler = new InstanceJanitorCrawler(awsClient());
+        JanitorCrawler instanceCrawler = new EddaInstanceJanitorCrawler(
+                new EddaClient(30000, 3, 1000, configuration()), "us-east-1", "eu-west-1");
         BasicJanitorContext instanceJanitorCtx = new BasicJanitorContext(
                 monkeyRegion, ruleEngine, instanceCrawler, janitorResourceTracker,
                 monkeyCalendar, configuration(), recorder());
@@ -203,8 +211,14 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
                             "simianarmy.janitor.rule.oldDetachedVolumeRule.detachDaysThreshold", 30),
                             (int) configuration().getNumOrElse(
                                     "simianarmy.janitor.rule.oldDetachedVolumeRule.retentionDays", 7)));
+            // zhefu TODO: if Edda is enabled
+            ruleEngine.addRule(new DeleteOnTerminationRule(monkeyCalendar, (int) configuration().getNumOrElse(
+                    "simianarmy.janitor.rule.deleteOnTerminationRule.retentionDays", 1)));
         }
-        JanitorCrawler volumeCrawler = new EBSVolumeJanitorCrawler(awsClient());
+        //zhefu TODO based on config
+//        JanitorCrawler volumeCrawler = new EBSVolumeJanitorCrawler(awsClient());
+        JanitorCrawler volumeCrawler = new EddaEBSVolumeJanitorCrawler(
+                new EddaClient(30000, 3, 1000, configuration()), "us-east-1", "eu-west-1");
         BasicJanitorContext volumeJanitorCtx = new BasicJanitorContext(
                 monkeyRegion, ruleEngine, volumeCrawler, janitorResourceTracker,
                 monkeyCalendar, configuration(), recorder());
@@ -219,7 +233,11 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
                     (int) configuration().getNumOrElse(
                             "simianarmy.janitor.rule.noGeneratedAMIRule.retentionDays", 7)));
         }
-        JanitorCrawler snapshotCrawler = new EBSSnapshotJanitorCrawler(awsClient());
+        //zhefu TODO based on config
+        JanitorCrawler snapshotCrawler = new EddaEBSSnapshotJanitorCrawler(
+                configuration().getStr("simianarmy.janitor.snapshots.ownerId"),
+                new EddaClient(30000, 3, 1000, configuration()), "us-east-1", "eu-west-1");
+//        JanitorCrawler snapshotCrawler = new EBSSnapshotJanitorCrawler(awsClient());
         BasicJanitorContext snapshotJanitorCtx = new BasicJanitorContext(
                 monkeyRegion, ruleEngine, snapshotCrawler, janitorResourceTracker,
                 monkeyCalendar, configuration(), recorder());
@@ -235,7 +253,10 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
                     (int) configuration().getNumOrElse(
                             "simianarmy.janitor.rule.oldUnusedLaunchConfigRule.retentionDays", 3)));
         }
-        JanitorCrawler crawler = new LaunchConfigJanitorCrawler(awsClient());
+        //zhefu TODO based on config
+//        JanitorCrawler crawler = new LaunchConfigJanitorCrawler(awsClient());
+        JanitorCrawler crawler = new EddaLaunchConfigJanitorCrawler(
+                new EddaClient(30000, 3, 1000, configuration()), "us-east-1", "eu-west-1");
         BasicJanitorContext janitorCtx = new BasicJanitorContext(
                 monkeyRegion, ruleEngine, crawler, janitorResourceTracker,
                 monkeyCalendar, configuration(), recorder());

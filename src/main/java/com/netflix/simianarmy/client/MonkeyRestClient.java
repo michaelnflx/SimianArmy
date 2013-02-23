@@ -2,7 +2,6 @@ package com.netflix.simianarmy.client;
 
 import org.apache.commons.lang.Validate;
 import org.apache.http.HttpResponse;
-import org.apache.http.StatusLine;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.AutoRetryHttpClient;
@@ -50,6 +49,7 @@ public abstract class MonkeyRestClient {
      * @param url the url
      * @return the JSON node for the response
      */
+    // CHECKSTYLE IGNORE MagicNumberCheck
     public JsonNode getJsonNodeFromUrl(String url) throws IOException {
         LOGGER.info(String.format("Getting Json response from url: %s", url));
         HttpGet request = new HttpGet(url);

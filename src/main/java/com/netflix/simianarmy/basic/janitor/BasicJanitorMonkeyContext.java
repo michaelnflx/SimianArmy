@@ -178,11 +178,7 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
         }
         JanitorCrawler crawler;
         if (configuration().getBoolOrElse("simianarmy.janitor.edda.enabled", false)) {
-            crawler = new EddaASGJanitorCrawler(
-                    new EddaClient((int) configuration().getNumOrElse("simianarmy.janitor.edda.client.timeout", 30000),
-                            (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retries", 3),
-                            (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retryInterval", 1000),
-                            configuration()), awsClient().region());
+            crawler = new EddaASGJanitorCrawler(createEddaClient(), awsClient().region());
         } else {
             crawler = new ASGJanitorCrawler(awsClient());
         }
@@ -206,11 +202,7 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
         }
         JanitorCrawler instanceCrawler;
         if (configuration().getBoolOrElse("simianarmy.janitor.edda.enabled", false)) {
-            instanceCrawler = new EddaInstanceJanitorCrawler(
-                    new EddaClient((int) configuration().getNumOrElse("simianarmy.janitor.edda.client.timeout", 30000),
-                            (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retries", 3),
-                            (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retryInterval", 1000),
-                            configuration()), awsClient().region());
+            instanceCrawler = new EddaInstanceJanitorCrawler(createEddaClient(), awsClient().region());
         } else {
             instanceCrawler = new InstanceJanitorCrawler(awsClient());
         }
@@ -229,18 +221,15 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
                             (int) configuration().getNumOrElse(
                                     "simianarmy.janitor.rule.oldDetachedVolumeRule.retentionDays", 7)));
 
-            if (configuration().getBoolOrElse("simianarmy.janitor.edda.enabled", false)) {
+            if (configuration().getBoolOrElse("simianarmy.janitor.edda.enabled", false)
+                && configuration().getBoolOrElse("simianarmy.janitor.rule.deleteOnTerminationRule.enabled", false)) {
                 ruleEngine.addRule(new DeleteOnTerminationRule(monkeyCalendar, (int) configuration().getNumOrElse(
-                        "simianarmy.janitor.rule.deleteOnTerminationRule.retentionDays", 1)));
+                        "simianarmy.janitor.rule.deleteOnTerminationRule.retentionDays", 3)));
             }
         }
         JanitorCrawler volumeCrawler;
         if (configuration().getBoolOrElse("simianarmy.janitor.edda.enabled", false)) {
-            volumeCrawler = new EddaEBSVolumeJanitorCrawler(
-                    new EddaClient((int) configuration().getNumOrElse("simianarmy.janitor.edda.client.timeout", 30000),
-                            (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retries", 3),
-                            (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retryInterval", 1000),
-                            configuration()), awsClient().region());
+            volumeCrawler = new EddaEBSVolumeJanitorCrawler(createEddaClient(), awsClient().region());
         } else {
             volumeCrawler = new EBSVolumeJanitorCrawler(awsClient());
         }
@@ -263,10 +252,7 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
         if (configuration().getBoolOrElse("simianarmy.janitor.edda.enabled", false)) {
             snapshotCrawler = new EddaEBSSnapshotJanitorCrawler(
                     configuration().getStr("simianarmy.janitor.snapshots.ownerId"),
-                    new EddaClient((int) configuration().getNumOrElse("simianarmy.janitor.edda.client.timeout", 30000),
-                            (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retries", 3),
-                            (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retryInterval", 1000),
-                            configuration()), awsClient().region());
+                    createEddaClient(), awsClient().region());
         } else {
             snapshotCrawler = new EBSSnapshotJanitorCrawler(awsClient());
         }
@@ -288,10 +274,7 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
         JanitorCrawler crawler;
         if (configuration().getBoolOrElse("simianarmy.janitor.edda.enabled", false)) {
             crawler = new EddaLaunchConfigJanitorCrawler(
-                    new EddaClient((int) configuration().getNumOrElse("simianarmy.janitor.edda.client.timeout", 30000),
-                            (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retries", 3),
-                            (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retryInterval", 1000),
-                            configuration()), awsClient().region());
+                    createEddaClient(), awsClient().region());
         } else {
             crawler = new LaunchConfigJanitorCrawler(awsClient());
         }
@@ -299,6 +282,13 @@ public class BasicJanitorMonkeyContext extends BasicSimianArmyContext implements
                 monkeyRegion, ruleEngine, crawler, janitorResourceTracker,
                 monkeyCalendar, configuration(), recorder());
         return new LaunchConfigJanitor(awsClient(), janitorCtx);
+    }
+
+    private EddaClient createEddaClient() {
+        return new EddaClient((int) configuration().getNumOrElse("simianarmy.janitor.edda.client.timeout", 30000),
+                (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retries", 3),
+                (int) configuration().getNumOrElse("simianarmy.janitor.edda.client.retryInterval", 1000),
+                configuration());
     }
 
     private Set<String> getEnabledResourceSet() {

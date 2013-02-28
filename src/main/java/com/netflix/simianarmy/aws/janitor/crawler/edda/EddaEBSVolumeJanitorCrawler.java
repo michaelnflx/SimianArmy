@@ -39,7 +39,7 @@ public class EddaEBSVolumeJanitorCrawler implements JanitorCrawler {
     private static final int BATCH_SIZE = 50;
 
     /**
-     * The field name for purpose
+     * The field name for purpose.
      */
     public static final String PURPOSE = "purpose";
 

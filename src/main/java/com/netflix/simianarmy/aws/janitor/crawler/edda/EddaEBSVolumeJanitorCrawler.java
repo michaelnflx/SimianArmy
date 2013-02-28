@@ -2,6 +2,7 @@ package com.netflix.simianarmy.aws.janitor.crawler.edda;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.netflix.simianarmy.Resource;
 import com.netflix.simianarmy.aws.AWSResource;
 import com.netflix.simianarmy.aws.AWSResourceType;
@@ -24,6 +25,7 @@ import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The crawler to crawl AWS EBS volumes for Janitor monkey using Edda.
@@ -35,6 +37,11 @@ public class EddaEBSVolumeJanitorCrawler implements JanitorCrawler {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.S'Z'");
 
     private static final int BATCH_SIZE = 50;
+
+    /**
+     * The field name for purpose
+     */
+    public static final String PURPOSE = "purpose";
 
     /**
      * The field name for deleteOnTermination.
@@ -192,6 +199,9 @@ public class EddaEBSVolumeJanitorCrawler implements JanitorCrawler {
                 LOGGER.info(String.format("Adding tag %s=%s", key, value));
                 description.append(String.format("; %s=%s", key, value));
                 resource.setTag(key, value);
+                if (key.equals(PURPOSE)) {
+                    resource.setAdditionalField(PURPOSE, value);
+                }
             }
             resource.setDescription(description.toString());
         }
@@ -233,43 +243,68 @@ public class EddaEBSVolumeJanitorCrawler implements JanitorCrawler {
                 Map<String, Resource> idToResource = Maps.newHashMap();
                 for (Resource resource : batch) {
                     idToResource.put(resource.getId(), resource);
+
                 }
                 if (batchResult == null || !batchResult.isArray()) {
                     throw new RuntimeException(String.format("Failed to get valid document from %s, got: %s",
                             batchUrl, batchResult));
                 }
 
+                Set<String> processedIds = Sets.newHashSet();
                 for (Iterator<JsonNode> it = batchResult.getElements(); it.hasNext();) {
                     JsonNode elem = it.next();
                     JsonNode data = elem.get("data");
                     String volumeId = data.get("volumeId").getTextValue();
                     Resource resource = idToResource.get(volumeId);
                     JsonNode attachments = data.get("attachments");
-                    if (attachments.isArray() && attachments.size() > 0) {
-                        JsonNode attachment = attachments.get(0);
-                        String instanceId = attachment.get("instanceId").getTextValue();
-                        String owner = getOwnerEmailForResource(resource);
-                        if (owner == null) {
-                            owner = instanceToOwner.get(instanceId);
-                        }
-                        resource.setOwnerEmail(owner);
 
-                        DateTime detachTime = TIME_FORMATTER.parseDateTime(elem.get("ltime").getTextValue());
-                        String metaTag = makeMetaTag(instanceId, owner, detachTime);
-                        LOGGER.info(String.format("Setting Janitor Metatag as %s for volume %s", metaTag, volumeId));
-                        resource.setTag(JanitorMonkey.JANITOR_META_TAG, metaTag);
-                        // Sets the owner email of the volume
+                    Validate.isTrue(attachments.isArray() && attachments.size() > 0);
+                    JsonNode attachment = attachments.get(0);
 
-                        boolean deleteOnTermination = attachment.get(DELETE_ON_TERMINATION).getBooleanValue();
-                        if (deleteOnTermination) {
-                            LOGGER.info(String.format(
-                                    "Volume %s had set the deleteOnTermination flag as true", volumeId));
-                        }
-                        resource.setAdditionalField(DELETE_ON_TERMINATION, String.valueOf(deleteOnTermination));
+                    JsonNode ltime = elem.get("ltime");
+                    if (ltime == null || ltime.isNull()) {
+                        continue;
+                    }
+                    DateTime detachTime = new DateTime(ltime.asLong());
+                    processedIds.add(volumeId);
+                    setAttachmentInfo(volumeId, attachment, detachTime, resource);
+                }
+
+                for (Map.Entry<String, Resource> volumeEntry : idToResource.entrySet()) {
+                    String id = volumeEntry.getKey();
+                    if (!processedIds.contains(id)) {
+                        Resource resource = volumeEntry.getValue();
+                        LOGGER.info(String.format("Volume %s never was attached, use createTime %s as the detachTime",
+                                id, resource.getLaunchTime()));
+                        setAttachmentInfo(id, null, new DateTime(resource.getLaunchTime().getTime()), resource);
                     }
                 }
             }
         }
+    }
+
+    private void setAttachmentInfo(String volumeId, JsonNode attachment, DateTime detachTime, Resource resource) {
+        String instanceId = null;
+        if (attachment != null) {
+            boolean deleteOnTermination = attachment.get(DELETE_ON_TERMINATION).getBooleanValue();
+            if (deleteOnTermination) {
+                LOGGER.info(String.format(
+                        "Volume %s had set the deleteOnTermination flag as true", volumeId));
+            }
+            resource.setAdditionalField(DELETE_ON_TERMINATION, String.valueOf(deleteOnTermination));
+            instanceId = attachment.get("instanceId").getTextValue();
+        }
+        // The subclass can customize the way to get the owner for a volume
+        String owner = getOwnerEmailForResource(resource);
+        if (owner == null && instanceId != null) {
+            owner = instanceToOwner.get(instanceId);
+        }
+        resource.setOwnerEmail(owner);
+
+        String metaTag = makeMetaTag(instanceId, owner, detachTime);
+        LOGGER.info(String.format("Setting Janitor Metatag as %s for volume %s", metaTag, volumeId));
+        resource.setTag(JanitorMonkey.JANITOR_META_TAG, metaTag);
+
     }
 
     private String makeMetaTag(String instance, String owner, DateTime lastDetachTime) {
@@ -294,7 +329,7 @@ public class EddaEBSVolumeJanitorCrawler implements JanitorCrawler {
             }
             batchUrl.append(resource.getId());
         }
-        batchUrl.append(";data.state=in-use;_since=0;_pp;_expand;_meta:"
+        batchUrl.append(";data.state=in-use;_since=0;_expand;_meta:"
                 + "(ltime,data:(volumeId,attachments:(deleteOnTermination,instanceId)))");
         return batchUrl.toString();
     }

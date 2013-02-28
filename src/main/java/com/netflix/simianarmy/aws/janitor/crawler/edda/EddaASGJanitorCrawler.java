@@ -28,6 +28,7 @@ import com.netflix.simianarmy.janitor.JanitorCrawler;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.Validate;
 import org.codehaus.jackson.JsonNode;
+import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +67,9 @@ public class EddaASGJanitorCrawler implements JanitorCrawler {
     /** The name representing the additional field name of ASG suspension time from ELB. */
     public static final String ASG_FIELD_SUSPENSION_TIME = "ASG_SUSPENSION_TIME";
 
+    /** The name representing the additional field name of ASG's last change/activity time. */
+    public static final String ASG_FIELD_LAST_CHANGE_TIME = "ASG_LAST_CHANGE_TIME";
+
     /** The regular expression patter below is for the termination reason added by AWS when
      * an ASG is suspended from ELB's traffic.
      */
@@ -74,6 +78,7 @@ public class EddaASGJanitorCrawler implements JanitorCrawler {
 
     private final EddaClient eddaClient;
     private final List<String> regions = Lists.newArrayList();
+    private final Map<String, Map<String, Long>> regionToAsgToLastChangeTime = Maps.newHashMap();
 
     /**
      * Instantiates a new basic ASG crawler.
@@ -115,6 +120,7 @@ public class EddaASGJanitorCrawler implements JanitorCrawler {
     }
 
     private List<Resource> getASGResources(String... asgNames) {
+        refreshAsgLastChangeTime();
         List<Resource> resources = Lists.newArrayList();
         for (String region : regions) {
             resources.addAll(getASGResourcesInRegion(region, asgNames));
@@ -229,6 +235,10 @@ public class EddaASGJanitorCrawler implements JanitorCrawler {
                 }
             }
         }
+        Long lastChangeTime = regionToAsgToLastChangeTime.get(region).get(asgName);
+        if (lastChangeTime != null) {
+            resource.setAdditionalField(ASG_FIELD_LAST_CHANGE_TIME, String.valueOf(lastChangeTime));
+        }
         return resource;
 
     }
@@ -269,4 +279,42 @@ public class EddaASGJanitorCrawler implements JanitorCrawler {
         }
         return null;
     }
+
+    private void refreshAsgLastChangeTime() {
+        regionToAsgToLastChangeTime.clear();
+        for (String region : regions) {
+            LOGGER.info(String.format("Getting ASG last change time in region %s", region));
+            Map<String, Long> asgToLastChangeTime = regionToAsgToLastChangeTime.get(region);
+            if (asgToLastChangeTime == null) {
+                asgToLastChangeTime = Maps.newHashMap();
+                regionToAsgToLastChangeTime.put(region, asgToLastChangeTime);
+            }
+            String url = eddaClient.getBaseUrl(region) + "/aws/autoScalingGroups;"
+                    + ";_expand;_meta:(stime,data:(autoScalingGroupName))";
+
+            JsonNode jsonNode = null;
+            try {
+                jsonNode = eddaClient.getJsonNodeFromUrl(url);
+            } catch (Exception e) {
+                LOGGER.error(String.format(
+                        "Failed to get Jason node from edda for ASG last change time in region %s.", region), e);
+            }
+
+            if (jsonNode == null || !jsonNode.isArray()) {
+                throw new RuntimeException(String.format("Failed to get valid document from %s, got: %s",
+                        url, jsonNode));
+            }
+
+            for (Iterator<JsonNode> it = jsonNode.getElements(); it.hasNext();) {
+                JsonNode asg = it.next();
+                String asgName = asg.get("data").get("autoScalingGroupName").getTextValue();
+                Long lastChangeTime = asg.get("stime").asLong();
+                // zhefu TODO change to debug
+                LOGGER.info(String.format("The last change time of ASG %s is %s", asgName,
+                        new DateTime(lastChangeTime)));
+                asgToLastChangeTime.put(asgName, lastChangeTime);
+            }
+        }
+    }
+
 }

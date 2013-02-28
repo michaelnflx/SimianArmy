@@ -173,7 +173,6 @@ public class EddaEBSSnapshotJanitorCrawler implements JanitorCrawler {
                 //TODO zhefu remove
                 LOGGER.info(String.format("Adding tag %s=%s", key, value));
                 resource.setTag(key, value);
-                //TODO zhefu set owner with "creator"
             }
         }
         JsonNode description = jsonNode.get("description");
@@ -181,18 +180,18 @@ public class EddaEBSSnapshotJanitorCrawler implements JanitorCrawler {
             resource.setDescription(description.getTextValue());
         }
         ((AWSResource) resource).setAWSResourceState(jsonNode.get("state").getTextValue());
-        resource.setOwnerEmail(getOwnerEmailForResource(resource));
         Collection<String> amis = snapshotToAMIs.get(resource.getId());
         if (amis != null) {
             resource.setAdditionalField(SNAPSHOT_FIELD_AMIS, StringUtils.join(amis, ","));
         }
+        resource.setOwnerEmail(getOwnerEmailForResource(resource));
         return resource;
     }
 
 
     @Override
     public String getOwnerEmailForResource(Resource resource) {
-        return resource.getOwnerEmail();
+        return resource.getTag("creator");
     }
 
     /**

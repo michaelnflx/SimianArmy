@@ -19,6 +19,7 @@
 package com.netflix.simianarmy.aws.janitor.crawler.edda;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.netflix.simianarmy.Resource;
 import com.netflix.simianarmy.aws.AWSResource;
 import com.netflix.simianarmy.aws.AWSResourceType;
@@ -38,6 +39,7 @@ import java.util.Date;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The crawler to crawl AWS instances for janitor monkey using Edda.
@@ -51,6 +53,7 @@ public class EddaInstanceJanitorCrawler implements JanitorCrawler {
 
     private final EddaClient eddaClient;
     private final List<String> regions = Lists.newArrayList();
+    private final Map<String, String> instanceToAsg = Maps.newHashMap();
 
 
     /**
@@ -101,6 +104,8 @@ public class EddaInstanceJanitorCrawler implements JanitorCrawler {
     }
 
     private List<Resource> getInstanceResourcesInRegion(String region, String... instanceIds) {
+        refreshAsgInstances();
+
         String url = eddaClient.getBaseUrl(region) + "/view/instances;";
         if (instanceIds != null && instanceIds.length != 0) {
             url += StringUtils.join(instanceIds, ',');
@@ -155,6 +160,7 @@ public class EddaInstanceJanitorCrawler implements JanitorCrawler {
         String owner = getOwnerEmailForResource(resource);
         resource.setOwnerEmail(owner);
         JsonNode tags = jsonNode.get("tags");
+        String asgName = null;
         if (tags == null || !tags.isArray() || tags.size() == 0) {
             //TODO zhefu change to debug
             LOGGER.info(String.format("No tags is found for %s", resource.getId()));
@@ -165,15 +171,65 @@ public class EddaInstanceJanitorCrawler implements JanitorCrawler {
                 String value = tag.get("value").getTextValue();
                 resource.setTag(key, value);
                 if ("aws:autoscaling:groupName".equals(key)) {
-                    resource.setAdditionalField(InstanceJanitorCrawler.INSTANCE_FIELD_ASG_NAME, value);
+                    asgName = value;
                 } else if (owner == null && "owner".equals(key)) {
                     resource.setOwnerEmail(value);
                 }
             }
             resource.setDescription(description.toString());
         }
+        // If we cannot find ASG name in tags, use the map for the ASG name
+        if (asgName == null) {
+            // zhefu TODO change to debug
+            asgName = instanceToAsg.get(instanceId);
+            if (asgName != null) {
+                LOGGER.info(String.format("Failed to find ASG name in tags of %s, use the ASG name %s from map",
+                        instanceId, asgName));
+            }
+        }
+        if (asgName != null) {
+            resource.setAdditionalField(InstanceJanitorCrawler.INSTANCE_FIELD_ASG_NAME, asgName);
+        }
         ((AWSResource) resource).setAWSResourceState(jsonNode.get("state").get("name").getTextValue());
         return resource;
 
+    }
+
+    private void refreshAsgInstances() {
+        instanceToAsg.clear();
+        for (String region : regions) {
+            LOGGER.info(String.format("Getting ASG instances in region %s", region));
+            String url = eddaClient.getBaseUrl(region) + "/aws/autoScalingGroups"
+                    + ";_expand:(autoScalingGroupName,instances:(instanceId))";
+
+            JsonNode jsonNode = null;
+            try {
+                jsonNode = eddaClient.getJsonNodeFromUrl(url);
+            } catch (Exception e) {
+                LOGGER.error(String.format(
+                        "Failed to get Jason node from edda for ASGs in region %s.", region), e);
+            }
+
+            if (jsonNode == null || !jsonNode.isArray()) {
+                throw new RuntimeException(String.format("Failed to get valid document from %s, got: %s", url, jsonNode));
+            }
+
+            for (Iterator<JsonNode> it = jsonNode.getElements(); it.hasNext();) {
+                JsonNode asg = it.next();
+                String asgName = asg.get("autoScalingGroupName").getTextValue();
+                JsonNode instances = asg.get("instances");
+                if (instances == null || instances.isNull() || !instances.isArray() || instances.size() == 0) {
+                    continue;
+                }
+                for (Iterator<JsonNode> instanceIt = instances.getElements(); instanceIt.hasNext();) {
+                    JsonNode instance = instanceIt.next();
+                    // zhefu TODO remove
+                    LOGGER.info(String.format("zhefu-test: mapping instance %s to ASG %s",
+                            instance.get("instanceId").getTextValue(), asgName));
+                    instanceToAsg.put(instance.get("instanceId").getTextValue(), asgName);
+                }
+            }
+
+        }
     }
 }

@@ -136,17 +136,9 @@ public class EddaEBSSnapshotJanitorCrawler implements JanitorCrawler {
                 LOGGER.info(String.format("Ignoring snapshotIds %s since it does not have the specified ownerId.",
                         elem.get("snapshotId").getTextValue()));
             } else {
-                //zhefu TODO remove
-                JsonNode desc = elem.get("description");
-                if (desc == null || !desc.getTextValue().startsWith("name=")) {
-                    LOGGER.info(String.format("zhefu-test: ignoring %s since it does not have the package information.",
-                            elem.get("snapshotId").getTextValue()));
-                    continue;
-                }
                 resources.add(parseJsonElementToSnapshotResource(region, elem));
             }
         }
-
         return resources;
     }
 
@@ -157,21 +149,15 @@ public class EddaEBSSnapshotJanitorCrawler implements JanitorCrawler {
         Resource resource = new AWSResource().withId(jsonNode.get("snapshotId").getTextValue()).withRegion(region)
                 .withResourceType(AWSResourceType.EBS_SNAPSHOT)
                 .withLaunchTime(new Date(startTime));
-        //zhefu TODO remove
-        LOGGER.info(String.format("Start time is %s", resource.getLaunchTime()));
-
         JsonNode tags = jsonNode.get("tags");
 
         if (tags == null || !tags.isArray() || tags.size() == 0) {
-            //TODO zhefu change to debug
-            LOGGER.info(String.format("No tags is found for %s", resource.getId()));
+            LOGGER.debug(String.format("No tags is found for %s", resource.getId()));
         } else {
             for (Iterator<JsonNode> it = tags.getElements(); it.hasNext();) {
                 JsonNode tag = it.next();
                 String key = tag.get("key").getTextValue();
                 String value = tag.get("value").getTextValue();
-                //TODO zhefu remove
-                LOGGER.info(String.format("Adding tag %s=%s", key, value));
                 resource.setTag(key, value);
             }
         }
@@ -229,26 +215,19 @@ public class EddaEBSSnapshotJanitorCrawler implements JanitorCrawler {
         for (Iterator<JsonNode> it = jsonNode.getElements(); it.hasNext();) {
             JsonNode elem = it.next();
             String imageId = elem.get("imageId").getTextValue();
-            LOGGER.info(String.format("zhefu-test: elem for %s is %s", imageId, elem));
             JsonNode blockMappings = elem.get("blockDeviceMappings");
-            //zhefu TODO remove
-            LOGGER.info(String.format("zhefu-test: block mapping for %s is %s", imageId, blockMappings));
             if (blockMappings == null || !blockMappings.isArray() || blockMappings.size() == 0) {
                 continue;
             }
             for (Iterator<JsonNode> blockMappingsIt = blockMappings.getElements(); blockMappingsIt.hasNext();) {
                 JsonNode blockMappingNode = blockMappingsIt.next();
                 JsonNode ebs = blockMappingNode.get("ebs");
-                //zhefu TODO remove
-                LOGGER.info(String.format("zhefu-test:ebs is %s", ebs));
                 if (ebs == null) {
                     continue;
                 }
                 JsonNode snapshotIdNode = ebs.get("snapshotId");
                 String snapshotId = snapshotIdNode.getTextValue();
-                //zhefu TODO: change to debug
-                LOGGER.info(String.format("Snapshot %s is used to generate AMI %s",
-                        snapshotId, imageId));
+                LOGGER.debug(String.format("Snapshot %s is used to generate AMI %s", snapshotId, imageId));
 
                 Collection<String> amis = snapshotToAMIs.get(snapshotId);
                 if (amis == null) {

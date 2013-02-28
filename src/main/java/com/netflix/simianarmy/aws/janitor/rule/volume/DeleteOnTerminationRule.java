@@ -113,8 +113,6 @@ public class DeleteOnTerminationRule implements Rule {
             } else {
                 LOGGER.info(String.format("Resource %s is already marked.", resource.getId()));
             }
-            // zhefu TODO remove
-            LOGGER.info(String.format("zhefu-test: Volume %s should have been deleted by AWS.", resource.getId()));
             return false;
         }
         return true;

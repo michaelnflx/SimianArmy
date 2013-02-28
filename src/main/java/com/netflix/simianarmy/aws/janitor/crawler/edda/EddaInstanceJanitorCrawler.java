@@ -139,17 +139,11 @@ public class EddaInstanceJanitorCrawler implements JanitorCrawler {
         Validate.notNull(jsonNode);
 
         String instanceId = jsonNode.get("instanceId").getTextValue();
-        //zhefu TODO remove
-        LOGGER.info(String.format("Processing instance %s", instanceId));
-        LOGGER.info(String.format("time text is %s", jsonNode.get("launchTime")));
-
         long launchTime = jsonNode.get("launchTime").getLongValue();
 
         Resource resource = new AWSResource().withId(instanceId).withRegion(region)
                 .withResourceType(AWSResourceType.INSTANCE)
                 .withLaunchTime(new Date(launchTime));
-        //zhefu TODO remove
-        LOGGER.info(String.format("Launch time is %s", resource.getLaunchTime()));
 
         JsonNode publicDnsName = jsonNode.get("publicDnsName");
         String description = String.format("type=%s; host=%s",
@@ -162,8 +156,7 @@ public class EddaInstanceJanitorCrawler implements JanitorCrawler {
         JsonNode tags = jsonNode.get("tags");
         String asgName = null;
         if (tags == null || !tags.isArray() || tags.size() == 0) {
-            //TODO zhefu change to debug
-            LOGGER.info(String.format("No tags is found for %s", resource.getId()));
+            LOGGER.debug(String.format("No tags is found for %s", resource.getId()));
         } else {
             for (Iterator<JsonNode> it = tags.getElements(); it.hasNext();) {
                 JsonNode tag = it.next();
@@ -180,10 +173,9 @@ public class EddaInstanceJanitorCrawler implements JanitorCrawler {
         }
         // If we cannot find ASG name in tags, use the map for the ASG name
         if (asgName == null) {
-            // zhefu TODO change to debug
             asgName = instanceToAsg.get(instanceId);
             if (asgName != null) {
-                LOGGER.info(String.format("Failed to find ASG name in tags of %s, use the ASG name %s from map",
+                LOGGER.debug(String.format("Failed to find ASG name in tags of %s, use the ASG name %s from map",
                         instanceId, asgName));
             }
         }
@@ -223,9 +215,6 @@ public class EddaInstanceJanitorCrawler implements JanitorCrawler {
                 }
                 for (Iterator<JsonNode> instanceIt = instances.getElements(); instanceIt.hasNext();) {
                     JsonNode instance = instanceIt.next();
-                    // zhefu TODO remove
-                    LOGGER.info(String.format("zhefu-test: mapping instance %s to ASG %s",
-                            instance.get("instanceId").getTextValue(), asgName));
                     instanceToAsg.put(instance.get("instanceId").getTextValue(), asgName);
                 }
             }

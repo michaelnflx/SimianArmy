@@ -164,10 +164,6 @@ public class EddaASGJanitorCrawler implements JanitorCrawler {
         Validate.notNull(jsonNode);
 
         String asgName = jsonNode.get("autoScalingGroupName").getTextValue();
-        //zhefu TODO remove
-        LOGGER.info(String.format("Processing ASG %s", asgName));
-        LOGGER.info(String.format("time text is %s", jsonNode.get("createdTime")));
-
         long createdTime = jsonNode.get("createdTime").getLongValue();
 
         Resource resource = new AWSResource().withId(asgName).withRegion(region)
@@ -176,15 +172,12 @@ public class EddaASGJanitorCrawler implements JanitorCrawler {
 
         JsonNode tags = jsonNode.get("tags");
         if (tags == null || !tags.isArray() || tags.size() == 0) {
-            //TODO zhefu change to debug
-            LOGGER.info(String.format("No tags is found for %s", resource.getId()));
+            LOGGER.debug(String.format("No tags is found for %s", resource.getId()));
         } else {
             for (Iterator<JsonNode> it = tags.getElements(); it.hasNext();) {
                 JsonNode tag = it.next();
                 String key = tag.get("key").getTextValue();
                 String value = tag.get("value").getTextValue();
-                //TODO zhefu remove
-                LOGGER.info(String.format("Adding tag %s=%s", key, value));
                 resource.setTag(key, value);
             }
         }
@@ -309,8 +302,7 @@ public class EddaASGJanitorCrawler implements JanitorCrawler {
                 JsonNode asg = it.next();
                 String asgName = asg.get("data").get("autoScalingGroupName").getTextValue();
                 Long lastChangeTime = asg.get("stime").asLong();
-                // zhefu TODO change to debug
-                LOGGER.info(String.format("The last change time of ASG %s is %s", asgName,
+                LOGGER.debug(String.format("The last change time of ASG %s is %s", asgName,
                         new DateTime(lastChangeTime)));
                 asgToLastChangeTime.put(asgName, lastChangeTime);
             }

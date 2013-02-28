@@ -179,8 +179,6 @@ public class EddaEBSVolumeJanitorCrawler implements JanitorCrawler {
         Resource resource = new AWSResource().withId(jsonNode.get("volumeId").getTextValue()).withRegion(region)
                 .withResourceType(AWSResourceType.EBS_VOLUME)
                 .withLaunchTime(new Date(createTime));
-        //zhefu TODO remove
-        LOGGER.info(String.format("Create time is %s", resource.getLaunchTime()));
 
         JsonNode tags = jsonNode.get("tags");
         StringBuilder description = new StringBuilder();
@@ -188,15 +186,12 @@ public class EddaEBSVolumeJanitorCrawler implements JanitorCrawler {
         description.append(String.format("size=%s", size == null ? "unknown" : size.getIntValue()));
 
         if (tags == null || !tags.isArray() || tags.size() == 0) {
-            //TODO zhefu change to debug
-            LOGGER.info(String.format("No tags is found for %s", resource.getId()));
+            LOGGER.debug(String.format("No tags is found for %s", resource.getId()));
         } else {
             for (Iterator<JsonNode> it = tags.getElements(); it.hasNext();) {
                 JsonNode tag = it.next();
                 String key = tag.get("key").getTextValue();
                 String value = tag.get("value").getTextValue();
-                //TODO zhefu remove
-                LOGGER.info(String.format("Adding tag %s=%s", key, value));
                 description.append(String.format("; %s=%s", key, value));
                 resource.setTag(key, value);
                 if (key.equals(PURPOSE)) {
